@@ -26,6 +26,9 @@ require("lazy").setup({
   spec = {
     -- import your plugins
     { "rose-pine/neovim", name = "rose-pine" },
+    { "nvim-lua/plenary.nvim", name = "plenary" },
+    { "mhartington/formatter.nvim", name = "formatter" },
+    { 'nvim-telescope/telescope.nvim', name = "telescope", tag = '0.1.8'}
   },
   -- Configure any other settings here. See the documentation for more details.
   -- colorscheme that will be used when installing plugins.
