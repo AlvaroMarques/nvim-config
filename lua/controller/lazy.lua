@@ -29,6 +29,16 @@ require("lazy").setup({
 		{ "nvim-lua/plenary.nvim", name = "plenary" },
 		{ "mhartington/formatter.nvim", name = "formatter" },
 		{ "nvim-telescope/telescope.nvim", name = "telescope", tag = "0.1.8" },
+		{
+			"hrsh7th/nvim-cmp",
+			event = "InsertEnter",
+			dependencies = {
+				{ "hrsh7th/cmp-nvim-lsp" },
+				{ "hrsh7th/cmp-vsnip" },
+				{ "hrsh7th/vim-vsnip" },
+			},
+		},
+		require("controller.metals"),
 	},
 	-- Configure any other settings here. See the documentation for more details.
 	-- colorscheme that will be used when installing plugins.
