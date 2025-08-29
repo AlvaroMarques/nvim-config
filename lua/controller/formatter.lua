@@ -72,6 +72,8 @@ require("formatter").setup({
 	},
 })
 
+vim.opt.tabstop = 4
+vim.opt.shiftwidth = 4
 local augroup = vim.api.nvim_create_augroup
 local autocmd = vim.api.nvim_create_autocmd
 augroup("__formatter__", { clear = true })
