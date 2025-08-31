@@ -1,5 +1,6 @@
 return {
 	"scalameta/nvim-metals",
+	name = "metals",
 	dependencies = {
 		{
 			"j-hui/fidget.nvim",
@@ -29,14 +30,30 @@ return {
 		-- "on" will enable the custom Metals status extension and you *have* to have
 		-- a have settings to capture this in your statusline or else you'll not see
 		-- any messages from metals. There is more info in the help docs about this
-		metals_config.init_options.statusBarProvider = "off"
 
 		-- Example if you are using cmp how to make sure the correct capabilities for snippets are set
 		metals_config.capabilities = require("cmp_nvim_lsp").default_capabilities()
 
 		metals_config.on_attach = function(client, bufnr)
 			require("metals").setup_dap()
+			local opts = { noremap = true, silent = true, buffer = bufnr }
+			vim.diagnostic.setqflist()
+			vim.diagnostic.setqflist({ severity = "E" })
+			vim.diagnostic.setqflist({ severity = "W" })
+			vim.lsp.buf.formatting()
+
+			vim.keymap.set("n", "gd", vim.lsp.buf.definition)
+			vim.keymap.set("n", "K", vim.lsp.buf.hover, opts)
+			vim.keymap.set("n", "gD", vim.lsp.buf.declaration)
+			vim.keymap.set("n", "<leader>rn", vim.lsp.buf.rename)
 		end
+
+		metals_config.init_options = {
+			projectRootPatterns = {
+				"build.sbt",
+			},
+			statusBarProvider = "off",
+		}
 
 		return metals_config
 	end,
