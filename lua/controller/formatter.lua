@@ -48,6 +48,15 @@ require("formatter").setup({
 				}
 			end,
 		},
+		json = {
+			function()
+				return {
+					exe = "jq",
+					args = { "." },
+					stdin = true,
+				}
+			end,
+		},
 		javascript = {
 			function()
 				return {
