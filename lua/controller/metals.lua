@@ -40,7 +40,6 @@ return {
 			vim.diagnostic.setqflist()
 			vim.diagnostic.setqflist({ severity = "E" })
 			vim.diagnostic.setqflist({ severity = "W" })
-			vim.lsp.buf.formatting()
 
 			vim.keymap.set("n", "gd", vim.lsp.buf.definition)
 			vim.keymap.set("n", "K", vim.lsp.buf.hover, opts)

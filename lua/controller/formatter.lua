@@ -1,6 +1,27 @@
 -- Utilities for creating configurations
 local util = require("formatter.util")
 
+local function black_or_hatch()
+	local filepath = vim.api.nvim_buf_get_name(0)
+
+	if vim.fn.executable("black") == 1 then
+		return {
+			exe = "black",
+			args = { "-", "--fast", "--stdin-filename", filepath },
+			stdin = true,
+		}
+	elseif vim.fn.executable("hatch") == 1 then
+		return {
+			exe = "hatch",
+			args = { "run", "dev:black", "-", "--fast", "--stdin-filename", filepath },
+			stdin = true,
+		}
+	else
+		-- Nothing available: let formatter.nvim skip silently (or print a message)
+		return nil
+	end
+end
+
 -- Provides the Format, FormatWrite, FormatLock, and FormatWriteLock commands
 require("formatter").setup({
 	-- Enable or disable logging
@@ -39,14 +60,7 @@ require("formatter").setup({
 			end,
 		},
 		python = {
-			require("formatter.filetypes.python").black,
-			function()
-				return {
-					exe = "black",
-					args = { "-", "--fast" },
-					stdin = true,
-				}
-			end,
+			black_or_hatch,
 		},
 		json = {
 			function()
