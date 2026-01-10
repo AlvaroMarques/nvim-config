@@ -16,6 +16,12 @@ local function black_or_hatch()
 			args = { "run", "dev:black", "-", "--fast", "--stdin-filename", filepath },
 			stdin = true,
 		}
+	elseif vim.fn.executable("uv") == 1 then
+		return {
+			exe = "uv",
+			args = { "run", "black", "-", "--fast", "--stdin-filename", filepath },
+			stdin = true,
+		}
 	else
 		-- Nothing available: let formatter.nvim skip silently (or print a message)
 		return nil
