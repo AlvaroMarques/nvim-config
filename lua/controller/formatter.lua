@@ -4,10 +4,10 @@ local util = require("formatter.util")
 local function black_or_hatch()
 	local filepath = vim.api.nvim_buf_get_name(0)
 
-	if vim.fn.executable("black") == 1 then
+	if vim.fn.executable("uv") == 1 then
 		return {
-			exe = "black",
-			args = { "-", "--fast", "--stdin-filename", filepath },
+			exe = "uv",
+			args = { "run", "black", "-", "--fast", "--stdin-filename", filepath },
 			stdin = true,
 		}
 	elseif vim.fn.executable("hatch") == 1 then
@@ -16,10 +16,10 @@ local function black_or_hatch()
 			args = { "run", "dev:black", "-", "--fast", "--stdin-filename", filepath },
 			stdin = true,
 		}
-	elseif vim.fn.executable("uv") == 1 then
+	elseif vim.fn.executable("black") == 1 then
 		return {
-			exe = "uv",
-			args = { "run", "black", "-", "--fast", "--stdin-filename", filepath },
+			exe = "black",
+			args = { "-", "--fast", "--stdin-filename", filepath },
 			stdin = true,
 		}
 	else
