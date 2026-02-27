@@ -38,11 +38,20 @@ require("lazy").setup({
 				{ "hrsh7th/vim-vsnip" },
 			},
 		},
+		{
+			"folke/persistence.nvim",
+			name = "persistence",
+			event = "BufReadPre",
+			opts = {
+				{
+					dir = vim.fn.stdpath("state") .. "/sessions/", -- directory where session files are saved
+					need = 0,
+					branch = false, -- use git branch to save session
+				},
+			},
+		},
 		require("controller.metals"),
 	},
-	-- Configure any other settings here. See the documentation for more details.
-	-- colorscheme that will be used when installing plugins.
 	install = { colorscheme = { "habamax" } },
-	-- automatically check for plugin updates
 	checker = {},
 })

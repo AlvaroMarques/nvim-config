@@ -86,6 +86,15 @@ require("formatter").setup({
 				}
 			end,
 		},
+		typescriptreact = {
+			function()
+				return {
+					exe = "npx prettier",
+					args = { "" },
+					stdin = false,
+				}
+			end,
+		},
 		sh = {
 			require("formatter.filetypes.sh").shfmt,
 		},
