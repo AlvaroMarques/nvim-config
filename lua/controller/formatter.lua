@@ -89,9 +89,27 @@ require("formatter").setup({
 		typescriptreact = {
 			function()
 				return {
-					exe = "npx prettier",
-					args = { "" },
-					stdin = false,
+					exe = "npx",
+					args = { "prettier", "--stdin-filepath", util.escape_path(util.get_current_buffer_file_path()), },
+					stdin = true,
+				}
+			end,
+		},
+		typescript = {
+			function()
+				return {
+					exe = "npx",
+					args = { "prettier", "--stdin-filepath", util.escape_path(util.get_current_buffer_file_path()), },
+					stdin = true,
+				}
+			end,
+		},
+		html = {
+			function()
+				return {
+					exe = "npx",
+					args = { "prettier", "--stdin-filepath", util.escape_path(util.get_current_buffer_file_path()), },
+					stdin = true,
 				}
 			end,
 		},
