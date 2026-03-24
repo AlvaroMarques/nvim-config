@@ -50,7 +50,6 @@ require("lazy").setup({
 				},
 			},
 		},
-		require("controller.metals"),
 	},
 	install = { colorscheme = { "habamax" } },
 	checker = {},
