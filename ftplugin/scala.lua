@@ -1,7 +1,30 @@
--- Start scala-reader LSP when opening a .scala file
+-- Portable scala-reader LSP setup
+local home = vim.env.HOME
+local repo_dir = home .. '/dev/misc/scala-reader'
+local repo_url = 'https://github.com/AlvaroMarques/scala-reader.git'
+
+-- Find uv on PATH
+local uv_bin = vim.fn.exepath('uv')
+if uv_bin == '' then
+  vim.notify('scala-reader: uv not found in PATH, skipping LSP', vim.log.levels.WARN)
+  return
+end
+
+-- Auto-clone if missing
+if not vim.uv.fs_stat(repo_dir) then
+  vim.fn.mkdir(home .. '/dev/misc', 'p')
+  vim.notify('scala-reader: cloning repo to ' .. repo_dir .. '...', vim.log.levels.INFO)
+  local result = vim.fn.system({ 'git', 'clone', repo_url, repo_dir })
+  if vim.v.shell_error ~= 0 then
+    vim.notify('scala-reader: clone failed: ' .. result, vim.log.levels.ERROR)
+    return
+  end
+end
+
+-- Start LSP
 vim.lsp.start({
   name = 'scala_reader',
-  cmd = { '/Users/alvaro.macedo/miniforge3/bin/uv', 'run', '--directory', '/private/tmp/scala-reader', 'python', '-m', 'scala_reader' },
+  cmd = { uv_bin, 'run', '--directory', repo_dir, 'python', '-m', 'scala_reader' },
   root_dir = vim.fs.root(0, { '.git', 'build.sbt', 'pom.xml' }),
 })
 
