@@ -22,6 +22,12 @@ vim.keymap.set('n', 'gr', vim.lsp.buf.references, opts)
 vim.keymap.set('n', 'gD', vim.lsp.buf.declaration, opts)
 vim.keymap.set('n', '<leader>rn', vim.lsp.buf.rename, opts)
 vim.keymap.set('n', '<leader>e', vim.diagnostic.open_float, opts)
+vim.keymap.set('n', '<leader>ooo', function()
+  vim.lsp.buf.code_action({
+    context = { only = { 'quickfix' } },
+    apply = true,
+  })
+end, opts)
 
 -- Format with rustfmt on save and reload the buffer
 vim.api.nvim_create_autocmd('BufWritePost', {
