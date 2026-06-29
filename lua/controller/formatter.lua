@@ -23,7 +23,42 @@ local function black_or_hatch()
 			stdin = true,
 		}
 	else
-		-- Nothing available: let formatter.nvim skip silently (or print a message)
+		return nil
+	end
+end
+
+local function prettier()
+	return {
+		exe = "npx",
+		args = {
+			"prettier",
+			"--stdin-filepath",
+			util.escape_path(util.get_current_buffer_file_path()),
+		},
+		stdin = true,
+	}
+end
+
+local function clang_format()
+	local filepath = util.get_current_buffer_file_path()
+
+	if vim.fn.executable("clang-format-21") == 1 then
+		return {
+			exe = "clang-format-21",
+			args = {
+				"--assume-filename=" .. util.escape_path(filepath),
+			},
+			stdin = true,
+		}
+	elseif vim.fn.executable("clang-format") == 1 then
+		return {
+			exe = "clang-format",
+			args = {
+				"--assume-filename=" .. util.escape_path(filepath),
+			},
+			stdin = true,
+		}
+	else
 		return nil
 	end
 end
@@ -32,26 +67,20 @@ end
 require("formatter").setup({
 	-- Enable or disable logging
 	logging = true,
+
 	-- Set the log level
 	log_level = vim.log.levels.WARN,
+
 	-- All formatter configurations are opt-in
 	filetype = {
-		-- Formatter configurations for filetype "lua" go here
-		-- and will be executed in order
 		lua = {
-			-- "formatter.filetypes.lua" defines default configurations for the
-			-- "lua" filetype
 			require("formatter.filetypes.lua").stylua,
 
-			-- You can also define your own configuration
 			function()
-				-- Supports conditional formatting
 				if util.get_current_buffer_file_name() == "special.lua" then
 					return nil
 				end
 
-				-- Full specification of configurations is down below and in Vim help
-				-- files
 				return {
 					exe = "stylua",
 					args = {
@@ -65,9 +94,11 @@ require("formatter").setup({
 				}
 			end,
 		},
+
 		python = {
 			black_or_hatch,
 		},
+
 		json = {
 			function()
 				return {
@@ -77,6 +108,7 @@ require("formatter").setup({
 				}
 			end,
 		},
+
 		javascript = {
 			function()
 				return {
@@ -86,54 +118,51 @@ require("formatter").setup({
 				}
 			end,
 		},
-		typescriptreact = {
-			function()
-				return {
-					exe = "npx",
-					args = { "prettier", "--stdin-filepath", util.escape_path(util.get_current_buffer_file_path()), },
-					stdin = true,
-				}
-			end,
-		},
+
 		typescript = {
-			function()
-				return {
-					exe = "npx",
-					args = { "prettier", "--stdin-filepath", util.escape_path(util.get_current_buffer_file_path()), },
-					stdin = true,
-				}
-			end,
+			prettier,
 		},
+
+		typescriptreact = {
+			prettier,
+		},
+
 		html = {
-			function()
-				return {
-					exe = "npx",
-					args = { "prettier", "--stdin-filepath", util.escape_path(util.get_current_buffer_file_path()), },
-					stdin = true,
-				}
-			end,
+			prettier,
 		},
+
+		c = {
+			clang_format,
+		},
+
+		cpp = {
+			clang_format,
+		},
+
+		cuda = {
+			clang_format,
+		},
+
 		sh = {
 			require("formatter.filetypes.sh").shfmt,
 		},
-		-- Use the special "*" filetype for defining formatter configurations on
-		-- any filetype
+
+		-- Use the special "*" filetype for defining formatter configurations on any filetype
 		["*"] = {
-			-- "formatter.filetypes.any" defines default configurations for any
-			-- filetype
 			require("formatter.filetypes.any").remove_trailing_whitespace,
-			-- Remove trailing whitespace without 'sed'
-			-- require("formatter.filetypes.any").substitute_trailing_whitespace,
 		},
 	},
 })
 
 vim.opt.tabstop = 4
 vim.opt.shiftwidth = 4
+
 local augroup = vim.api.nvim_create_augroup
 local autocmd = vim.api.nvim_create_autocmd
+
 augroup("__formatter__", { clear = true })
+
 autocmd("BufWritePost", {
 	group = "__formatter__",
-	command = ":FormatWrite",
+	command = "FormatWriteLock",
 })
