@@ -19,7 +19,7 @@ vim.opt.rtp:prepend(lazypath)
 -- loading lazy.nvim so that mappings are correct.
 -- This is also a good place to setup other settings (vim.opt)
 vim.g.mapleader = " "
-vim.g.maplocalleader = "\\"
+vim.g.maplocalleader = ","
 
 -- Setup lazy.nvim
 require("lazy").setup({
@@ -56,8 +56,29 @@ require("lazy").setup({
 						{ name = "vsnip" },
 					}),
 				})
+				-- Clojure also completes from the live nREPL session via Conjure
+				cmp.setup.filetype("clojure", {
+					sources = cmp.config.sources({
+						{ name = "conjure" },
+						{ name = "nvim_lsp" },
+						{ name = "vsnip" },
+					}),
+				})
 			end,
 		},
+		{
+			"Olical/conjure",
+			ft = { "clojure" },
+			init = function()
+				-- doc_word = true prevents clojure-lsp from attaching to .clj buffers
+				vim.g["conjure#mapping#doc_word"] = false
+				vim.g["conjure#log#hud#enabled"] = false
+			end,
+		},
+		{ "PaterJason/cmp-conjure", ft = { "clojure" } },
+		{ "tpope/vim-dispatch", ft = { "clojure" } },
+		{ "radenling/vim-dispatch-neovim", ft = { "clojure" }, dependencies = { "tpope/vim-dispatch" } },
+		{ "clojure-vim/vim-jack-in", ft = { "clojure" }, dependencies = { "tpope/vim-dispatch" } },
 		{
 			"folke/persistence.nvim",
 			name = "persistence",
