@@ -21,12 +21,17 @@ if not vim.uv.fs_stat(repo_dir) then
   end
 end
 
--- Start LSP
-vim.lsp.start({
-  name = 'scala_reader',
-  cmd = { uv_bin, 'run', '--directory', repo_dir, 'python', '-m', 'scala_reader' },
-  root_dir = vim.fs.root(0, { '.git', 'build.sbt', 'pom.xml' }),
-})
+-- Start LSP (also used by :ScalaReaderRestart)
+local function start(bufnr)
+  bufnr = bufnr or vim.api.nvim_get_current_buf()
+  return vim.lsp.start({
+    name = 'scala_reader',
+    cmd = { uv_bin, 'run', '--directory', repo_dir, 'python', '-m', 'scala_reader' },
+    root_dir = vim.fs.root(bufnr, { '.git', 'build.sbt', 'pom.xml' }),
+  }, { bufnr = bufnr })
+end
+
+start()
 
 -- LSP keybinds (buffer-local, only for scala files)
 local opts = { buffer = true, silent = true }
@@ -131,3 +136,56 @@ end
 
 vim.api.nvim_create_user_command('ScalaReaderDebug', open_debug_window, { desc = 'Show scala-reader cache debug window' })
 vim.keymap.set('n', '<leader>rd', open_debug_window, { buffer = true, desc = 'Scala Reader Debug' })
+
+-- Restart: kill the server process and reattach every buffer it was serving.
+-- Needed after editing the Python source, since the server is long-lived.
+-- (:LspRestart is an nvim-lspconfig command and does not exist in this config.)
+local function restart()
+  local clients = vim.lsp.get_clients({ name = 'scala_reader' })
+
+  local bufs = {}
+  for _, client in ipairs(clients) do
+    for buf in pairs(client.attached_buffers or {}) do
+      if vim.api.nvim_buf_is_loaded(buf) then
+        table.insert(bufs, buf)
+      end
+    end
+  end
+  if #bufs == 0 then
+    bufs = { vim.api.nvim_get_current_buf() }
+  end
+
+  local function gone()
+    return #vim.lsp.get_clients({ name = 'scala_reader' }) == 0
+  end
+
+  if #clients > 0 then
+    -- Ask nicely first: a forced kill exits 143 and Neovim reports that as an
+    -- error on every restart. vim.lsp.start would reuse a still-exiting client,
+    -- so wait for the process to actually go away before starting a new one.
+    for _, client in ipairs(clients) do
+      client:stop()
+    end
+    if not vim.wait(2000, gone, 25) then
+      for _, client in ipairs(vim.lsp.get_clients({ name = 'scala_reader' })) do
+        client:stop(true)
+      end
+      if not vim.wait(2000, gone, 25) then
+        vim.notify('scala-reader: old client did not exit, not restarting', vim.log.levels.ERROR)
+        return
+      end
+    end
+  end
+
+  local ok = false
+  for _, buf in ipairs(bufs) do
+    ok = start(buf) ~= nil or ok
+  end
+  vim.notify(
+    ok and ('scala-reader: restarted (' .. #bufs .. ' buffer(s))') or 'scala-reader: restart failed',
+    ok and vim.log.levels.INFO or vim.log.levels.ERROR
+  )
+end
+
+vim.api.nvim_create_user_command('ScalaReaderRestart', restart, { desc = 'Restart the scala-reader LSP server' })
+vim.keymap.set('n', '<leader>rr', restart, { buffer = true, desc = 'Scala Reader Restart' })
