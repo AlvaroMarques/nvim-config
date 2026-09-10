@@ -63,6 +63,32 @@ local function clang_format()
 	end
 end
 
+local function sqlfluff()
+	local args = { "format", "-" }
+
+	-- Respect a project .sqlfluff (which carries its own dialect); otherwise default to ansi
+	if vim.fn.findfile(".sqlfluff", ".;") == "" then
+		table.insert(args, "--dialect")
+		table.insert(args, "ansi")
+	end
+
+	if vim.fn.executable("sqlfluff") == 1 then
+		return {
+			exe = "sqlfluff",
+			args = args,
+			stdin = true,
+		}
+	elseif vim.fn.executable("uv") == 1 then
+		return {
+			exe = "uv",
+			args = vim.list_extend({ "tool", "run", "sqlfluff" }, args),
+			stdin = true,
+		}
+	else
+		return nil
+	end
+end
+
 -- Provides the Format, FormatWrite, FormatLock, and FormatWriteLock commands
 require("formatter").setup({
 	-- Enable or disable logging
@@ -145,6 +171,10 @@ require("formatter").setup({
 
 		sh = {
 			require("formatter.filetypes.sh").shfmt,
+		},
+
+		sql = {
+			sqlfluff,
 		},
 
 		-- Use the special "*" filetype for defining formatter configurations on any filetype
