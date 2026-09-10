@@ -76,6 +76,15 @@ require("lazy").setup({
 			end,
 		},
 		{ "PaterJason/cmp-conjure", ft = { "clojure" } },
+		{
+			-- In-buffer markdown rendering. Uses the markdown/markdown_inline
+			-- treesitter parsers bundled with Neovim 0.10+, so no nvim-treesitter.
+			"MeanderingProgrammer/render-markdown.nvim",
+			name = "render-markdown",
+			ft = { "markdown" },
+			cmd = { "RenderMarkdown" },
+			opts = {},
+		},
 		{ "tpope/vim-dispatch", ft = { "clojure" } },
 		{ "radenling/vim-dispatch-neovim", ft = { "clojure" }, dependencies = { "tpope/vim-dispatch" } },
 		{ "clojure-vim/vim-jack-in", ft = { "clojure" }, dependencies = { "tpope/vim-dispatch" } },

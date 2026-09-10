@@ -9,6 +9,10 @@ vim.keymap.set("n", "<leader>fp", function()
 	vim.fn.setreg("+", vim.fn.expand("%:p:."))
 end, { desc = "get file path" })
 
+vim.keymap.set("n", "<leader>md", function()
+	require("render-markdown").toggle()
+end, { desc = "Toggle markdown render" })
+
 local persistence = require("persistence")
 vim.keymap.set("n", "<leader>qs", function()
 	persistence.load()

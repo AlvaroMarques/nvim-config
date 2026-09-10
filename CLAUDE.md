@@ -22,6 +22,7 @@ lua/controller/
 - **nvim-telescope/telescope.nvim** (0.1.8) — Fuzzy finder
 - **folke/persistence.nvim** — Session management
 - **scalameta/nvim-metals** + fidget.nvim + nvim-dap — Scala/Java LSP & debug
+- **MeanderingProgrammer/render-markdown.nvim** — In-buffer markdown rendering (`ft = markdown`); uses the `markdown`/`markdown_inline` treesitter parsers bundled with Neovim 0.10+, so nvim-treesitter is deliberately not installed
 
 ## Key Bindings (leader = space)
 
@@ -32,6 +33,7 @@ lua/controller/
 | `<leader>pq` | Telescope git files |
 | `<leader>ps` | Telescope grep string |
 | `<leader>fp` | Copy file path to clipboard |
+| `<leader>md` | Toggle markdown render (render-markdown.nvim) |
 | `<leader>qs` / `<leader>ql` | Load last session |
 | `<leader>qS` | Select session |
 | `<leader>qd` | Stop session tracking |
