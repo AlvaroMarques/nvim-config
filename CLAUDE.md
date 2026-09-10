@@ -52,7 +52,7 @@ lua/controller/
 
 The `black_or_hatch()` function in `formatter.lua` picks the best available Python formatter: prefers `uv run black`, falls back to `hatch run dev:black`, then plain `black`.
 
-The `sqlfluff()` function uses `--dialect ansi` unless a `.sqlfluff` file is found in a parent directory, in which case the project's own dialect/rules apply.
+The `sqlfluff()` function passes no dialect flag — dialect and rules come from sqlfluff's own config cascade: a project `.sqlfluff` if present, otherwise `~/.sqlfluff` (not in this repo). That global config sets `dialect = databricks` so backtick-quoted identifiers (`` `type` ``), `DECLARE VARIABLE`, `IDENTIFIER()`, and ``delta.`s3://...` `` parse correctly, plus lowercase capitalisation policies. The `ansi` dialect cannot parse backticks and silently leaves the file unformatted.
 
 ## LSP
 

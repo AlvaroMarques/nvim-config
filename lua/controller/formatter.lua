@@ -63,14 +63,10 @@ local function clang_format()
 	end
 end
 
+-- Dialect and rules come from sqlfluff's config cascade: a project .sqlfluff
+-- if present, otherwise ~/.sqlfluff (which defaults to the databricks dialect).
 local function sqlfluff()
 	local args = { "format", "-" }
-
-	-- Respect a project .sqlfluff (which carries its own dialect); otherwise default to ansi
-	if vim.fn.findfile(".sqlfluff", ".;") == "" then
-		table.insert(args, "--dialect")
-		table.insert(args, "ansi")
-	end
 
 	if vim.fn.executable("sqlfluff") == 1 then
 		return {
