@@ -11,6 +11,8 @@ lua/controller/
   keybinds.lua              → All keybindings (leader = <space>)
   formatter.lua             → formatter.nvim setup + format-on-save
   metals.lua                → Scala/Java LSP (nvim-metals) + DAP + completion
+  claudedoc.lua             → Markdown skeleton + Claude-filled sidecar snippets (see below)
+bin/claudedoc.py            → CLI behind claudedoc.lua (blocks/render/ask/ask-all/new-id)
 ```
 
 ## Plugins (managed by lazy.nvim)
@@ -22,7 +24,7 @@ lua/controller/
 - **nvim-telescope/telescope.nvim** (0.1.8) — Fuzzy finder
 - **folke/persistence.nvim** — Session management
 - **scalameta/nvim-metals** + fidget.nvim + nvim-dap — Scala/Java LSP & debug
-- **MeanderingProgrammer/render-markdown.nvim** — In-buffer markdown rendering (`ft = markdown`); uses the `markdown`/`markdown_inline` treesitter parsers bundled with Neovim 0.10+, so nvim-treesitter is deliberately not installed
+- **MeanderingProgrammer/render-markdown.nvim** — In-buffer markdown rendering (`ft = markdown`); uses the `markdown`/`markdown_inline` treesitter parsers bundled with Neovim 0.10+, so nvim-treesitter is deliberately not installed. `wrap` is turned off only while rendered (`win_options.wrap`): Neovim computes wrap points on unconcealed text, so hidden link URLs otherwise leave gaps and split words. `ftplugin/markdown.lua` sets `linebreak` + `breakindent` for the raw view.
 
 ## Key Bindings (leader = space)
 
@@ -38,6 +40,54 @@ lua/controller/
 | `<leader>qS` | Select session |
 | `<leader>qd` | Stop session tracking |
 | `gd` / `gD` / `K` / `<leader>rn` | LSP: definition / declaration / hover / rename |
+| `<leader>cl*` (markdown only) | claudedoc, see below |
+
+## claudedoc (markdown skeleton + Claude snippets)
+
+The skeleton `doc.md` is the source of truth and is never written by Claude.
+Prompts are tagged blocks; answers go to `doc.snippets/<id>.md` (plus
+`<id>.prompt` for cache invalidation and `.session` to resume the same
+`claude -p` session); `doc.out.md` is rendered from skeleton + snippets and
+opened read-only. Blocks without a snippet render as-is.
+
+```markdown
+```claude-command id=foo
+multi-line prompt, replaced by the snippet
+```
+Objective: [claude id=bar] one-line prompt; marker..EOL replaced by the snippet
+text [claude id=baz] embedded prompt [/claude] more text   (several per line ok; cursor column picks which)
+```
+
+| Key | Action |
+|-----|--------|
+| `<leader>cl` (n) / (x) | New fenced block with fresh id / wrap selection as prompt |
+| `<leader>cli` | New inline `[claude id=]` marker at cursor |
+| `<leader>cld` / `clD` | Fill block under cursor: cached unless prompt changed / force |
+| `<leader>cla` / `clA` | Fill all missing+stale blocks / force all |
+| `<leader>clt` | Toggle skeleton <-> rendered, cursor on the same block |
+| `<leader>cls` | Open the snippet of the block under cursor in a vsplit (hand-edit) |
+| `<leader>clb` | Quickfix list of blocks with status (missing/stale/cached) |
+| `<leader>clr` | Re-render (also automatic on save of skeleton or snippet) |
+| `<leader>clL` / `clS` | Link asks to an existing Claude session: fork (interactive session untouched) / shared |
+| `<leader>clU` | Unlink session (next ask starts fresh) |
+| `<leader>clh` | Help popup with this table |
+| `<leader>clw` | Watch the live log of the block under cursor (tool calls, text, cost) in a bottom split |
+| `<leader>clq` | Show the per-document queue |
+| `<leader>clx` / `clX` | Cancel the running ask / cancel and drop the queue (old snippet is kept) |
+
+Asks stack: one `claude -p` runs at a time per document (they share
+`.session`), the rest wait in a Lua-side queue in order. The statusline shows
+`⠋ claudedoc:<running> +<queued>` via `v:lua.ClaudeDocStatus()` in `init.lua`,
+and `<leader>clb` marks blocks `running` / `queued`. Each ask streams
+`--output-format stream-json` into `doc.snippets/<id>.log` (what `clw` tails).
+The ask's system prompt ends with "You are a subagent. Don't run memo."
+
+`CLAUDEDOC_FLAGS` (default `--dangerously-skip-permissions`) and
+`CLAUDEDOC_MODEL` tune the `claude -p` call. Toggle works from either file via
+`doc.snippets/.linemap`, so the rendered file carries no `<!-- claude id -->`
+comments (Confluence shows them); `render --markers` adds them if wanted. Linking reads `~/.claude/projects/<cwd-slug>/*.jsonl`;
+an interactive session's transcript is flushed per turn, so a fork sees it up to
+its last completed turn.
 
 ## Formatting (format-on-save via BufWritePost)
 
