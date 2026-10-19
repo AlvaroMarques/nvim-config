@@ -83,14 +83,11 @@ require("lazy").setup({
 			name = "render-markdown",
 			ft = { "markdown" },
 			cmd = { "RenderMarkdown" },
-			opts = {
-				-- Neovim computes wrap points on the unconcealed text, so hidden link
-				-- URLs leave gaps and split words (plugin doc: limitations.md). Disable
-				-- wrap only while rendered; raw view keeps wrap for writing.
-				win_options = {
-					wrap = { default = true, rendered = false },
-				},
-			},
+			-- Note: do not toggle `wrap` via win_options. The plugin stops rendering
+			-- whenever the view is scrolled sideways (ui.lua checks leftcol == 0), so
+			-- nowrap-while-rendered loops wrap on/off on long lines and flickers.
+			-- Uneven wrapping around concealed link URLs is a known plugin limitation.
+			opts = {},
 		},
 		{ "tpope/vim-dispatch", ft = { "clojure" } },
 		{ "radenling/vim-dispatch-neovim", ft = { "clojure" }, dependencies = { "tpope/vim-dispatch" } },

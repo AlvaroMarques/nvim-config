@@ -24,7 +24,7 @@ bin/claudedoc.py            → CLI behind claudedoc.lua (blocks/render/ask/ask-
 - **nvim-telescope/telescope.nvim** (0.1.8) — Fuzzy finder
 - **folke/persistence.nvim** — Session management
 - **scalameta/nvim-metals** + fidget.nvim + nvim-dap — Scala/Java LSP & debug
-- **MeanderingProgrammer/render-markdown.nvim** — In-buffer markdown rendering (`ft = markdown`); uses the `markdown`/`markdown_inline` treesitter parsers bundled with Neovim 0.10+, so nvim-treesitter is deliberately not installed. `wrap` is turned off only while rendered (`win_options.wrap`): Neovim computes wrap points on unconcealed text, so hidden link URLs otherwise leave gaps and split words. `ftplugin/markdown.lua` sets `linebreak` + `breakindent` for the raw view.
+- **MeanderingProgrammer/render-markdown.nvim** — In-buffer markdown rendering (`ft = markdown`); uses the `markdown`/`markdown_inline` treesitter parsers bundled with Neovim 0.10+, so nvim-treesitter is deliberately not installed. Do not toggle `wrap` per render state: the plugin stops rendering when the view is scrolled sideways, so nowrap-while-rendered flickers on long lines. Uneven wraps around concealed link URLs are a known plugin limitation. `ftplugin/markdown.lua` sets `linebreak` + `breakindent`.
 
 ## Key Bindings (leader = space)
 
