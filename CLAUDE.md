@@ -74,6 +74,8 @@ text [claude id=baz] embedded prompt [/claude] more text   (several per line ok;
 | `<leader>clw` | Watch the live log of the block under cursor (tool calls, text, cost) in a bottom split |
 | `<leader>clq` | Show the per-document queue |
 | `<leader>clx` / `clX` | Cancel the running ask / cancel and drop the queue (old snippet is kept) |
+| `<leader>clg` | One instruction for the whole document (e.g. "make it impersonal"): Claude edits skeleton prose + snippets in place, prompts untouched |
+| `<leader>clu` | Restore a snapshot; one is taken before every `clg` and every restore, so restores are undoable too |
 
 Asks stack: one `claude -p` runs at a time per document (they share
 `.session`), the rest wait in a Lua-side queue in order. The statusline shows
@@ -81,6 +83,12 @@ Asks stack: one `claude -p` runs at a time per document (they share
 and `<leader>clb` marks blocks `running` / `queued`. Each ask streams
 `--output-format stream-json` into `doc.snippets/<id>.log` (what `clw` tails).
 The ask's system prompt ends with "You are a subagent. Don't run memo."
+
+`clg` snapshots `doc.md` + `doc.snippets/*.{md,prompt}` into
+`doc.snippets/.history/<timestamp>/` before running, then queues as id `@doc`.
+A doc inside `X.snippets/` (a snippet opened with `cls` that has its own blocks)
+resolves its session, cwd and queue from the outermost `X.md` (`root_doc()` /
+`root_of()`), so asks there resume the same session and `clL`/`clU` act on it.
 
 `CLAUDEDOC_FLAGS` (default `--dangerously-skip-permissions`) and
 `CLAUDEDOC_MODEL` tune the `claude -p` call. Toggle works from either file via

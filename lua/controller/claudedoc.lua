@@ -5,8 +5,9 @@ local M = {}
 
 local script = vim.fn.stdpath("config") .. "/bin/claudedoc.py"
 
--- per-document queue: Q[path] = { items = { {id=, force=}... }, job = <jobid|nil>, current = <id|nil> }
--- asks on one document share a claude session, so they run one at a time, in order.
+-- per-session queue: Q[root] = { items = { {doc=, id=, force=, instr=}... }, job = <jobid|nil>, current = <id|nil> }
+-- asks on one document (and on docs nested in its snippets) share a claude session,
+-- so they run one at a time, in order. id "@doc" is a whole-document rewrite.
 local Q = {}
 local spinner, spin_i, spin_timer = { "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏" }, 1, nil
 
@@ -37,31 +38,6 @@ local function spin_update()
 	vim.cmd("redrawstatus")
 end
 
--- state of a block id for one document: "running" | "queued" | nil
-local function q_state(path, id)
-	local q = Q[path]
-	if not q then return nil end
-	if q.current == id then return "running" end
-	for _, it in ipairs(q.items) do
-		if it.id == id then return "queued" end
-	end
-	return nil
-end
-
-function ClaudeDocStatus()
-	local parts = {}
-	for _, q in pairs(Q) do
-		if q.current then
-			local s = q.current
-			if #q.items > 0 then s = s .. " +" .. #q.items end
-			parts[#parts + 1] = s
-		end
-	end
-	if #parts == 0 then return "" end
-	table.sort(parts)
-	return spinner[spin_i] .. " claudedoc:" .. table.concat(parts, ",") .. " "
-end
-
 local function is_out(path)
 	return path:match("%.out%.md$") ~= nil
 end
@@ -76,6 +52,42 @@ end
 
 local function snippets_dir(path)
 	return (skeleton_of(path):gsub("%.md$", ".snippets"))
+end
+
+-- outermost doc owning `path`: a doc inside X.snippets/ belongs to X.md (same
+-- session); mirrors root_doc() in claudedoc.py
+local function root_of(path)
+	path = skeleton_of(path)
+	for dir in path:gmatch("()%.snippets/") do -- left to right = outermost first
+		local cand = path:sub(1, dir - 1) .. ".md"
+		if vim.uv.fs_stat(cand) then return cand end
+	end
+	return path
+end
+
+-- state of a block id for one document: "running" | "queued" | nil
+local function q_state(path, id)
+	local q = Q[root_of(path)]
+	if not q then return nil end
+	if q.current and q.current.doc == path and q.current.id == id then return "running" end
+	for _, it in ipairs(q.items) do
+		if it.doc == path and it.id == id then return "queued" end
+	end
+	return nil
+end
+
+function ClaudeDocStatus()
+	local parts = {}
+	for _, q in pairs(Q) do
+		if q.current then
+			local s = q.current.id
+			if #q.items > 0 then s = s .. " +" .. #q.items end
+			parts[#parts + 1] = s
+		end
+	end
+	if #parts == 0 then return "" end
+	table.sort(parts)
+	return spinner[spin_i] .. " claudedoc:" .. table.concat(parts, ",") .. " "
 end
 
 local function run(args, cb)
@@ -214,12 +226,14 @@ function M.new_inline()
 end
 
 -- queue worker -------------------------------------------------------------
-local function pump(path)
-	local q = q_of(path)
+local function pump(root)
+	local q = q_of(root)
 	if q.job or #q.items == 0 then return end
 	local it = table.remove(q.items, 1)
-	q.current = it.id
+	local path = it.doc
+	q.current = it
 	local args = { "ask", path, it.id }
+	if it.instr then args = { "rewrite", path, it.instr } end
 	if it.force then table.insert(args, "--force") end
 	local out, err = {}, {}
 	q.job = vim.fn.jobstart({ "python3", "-I", script, unpack(args) }, {
@@ -237,25 +251,27 @@ local function pump(path)
 			else
 				vim.notify("claudedoc: " .. it.id .. " failed: " .. table.concat(err, "\n"):gsub("%s+$", ""), vim.log.levels.ERROR)
 			end
+			if it.instr then vim.cmd("silent! checktime") end -- rewrite edited skeleton + snippets
 			reload_out(path)
 			spin_update()
-			pump(path)
+			pump(root)
 		end,
 	})
 	vim.notify("claudedoc: asking " .. it.id .. " ...", vim.log.levels.INFO)
 	spin_update()
 end
 
-local function enqueue(path, id, force)
-	local q = q_of(path)
+local function enqueue(path, id, force, instr)
+	local root = root_of(path)
+	local q = q_of(root)
 	local st = q_state(path, id)
 	if st == "running" then return vim.notify("claudedoc: " .. id .. " already running", vim.log.levels.WARN) end
 	if st == "queued" then return vim.notify("claudedoc: " .. id .. " already queued", vim.log.levels.WARN) end
-	q.items[#q.items + 1] = { id = id, force = force }
+	q.items[#q.items + 1] = { doc = path, id = id, force = force, instr = instr }
 	if q.job then
 		vim.notify(("claudedoc: queued %s (position %d)"):format(id, #q.items), vim.log.levels.INFO)
 	end
-	pump(path)
+	pump(root)
 end
 
 -- <leader>cld / clD : fill block under cursor (cache unless prompt changed / force); stacks
@@ -276,22 +292,54 @@ end
 function M.do_all(force)
 	local path = skeleton_of(vim.fn.expand("%:p"))
 	vim.cmd("silent! wall")
-	local n = 0
+	local root, n = root_of(path), 0
+	local q = q_of(root)
 	for _, b in ipairs(blocks(path)) do
 		if (force or b.status ~= "cached") and not q_state(path, b.id) then
-			q_of(path).items[#q_of(path).items + 1] = { id = b.id, force = force }
+			q.items[#q.items + 1] = { doc = path, id = b.id, force = force }
 			n = n + 1
 		end
 	end
 	if n == 0 then return vim.notify("claudedoc: nothing to fill (all cached)", vim.log.levels.INFO) end
 	vim.notify(("claudedoc: queued %d block(s)"):format(n), vim.log.levels.INFO)
-	pump(path)
+	pump(root)
+end
+
+-- <leader>clg : apply one instruction to the whole document (skeleton prose + snippets),
+-- snapshotting first; queued like any ask
+function M.rewrite()
+	local path = skeleton_of(vim.fn.expand("%:p"))
+	vim.ui.input({ prompt = "claudedoc, whole document: " }, function(instr)
+		if not instr or instr:match("^%s*$") then return end
+		vim.cmd("silent! wall")
+		enqueue(path, "@doc", false, instr)
+	end)
+end
+
+-- <leader>clu : restore a snapshot (taken before each rewrite and each restore)
+function M.restore()
+	local path = skeleton_of(vim.fn.expand("%:p"))
+	local o = run_sync({ "snapshots", path })
+	local snaps = o and vim.json.decode(o) or {}
+	if #snaps == 0 then return vim.notify("claudedoc: no snapshots", vim.log.levels.INFO) end
+	vim.ui.select(snaps, {
+		prompt = "Restore to the state before",
+		format_item = function(s) return os.date("%m-%d %H:%M:%S", s.time) .. "  " .. s.label end,
+	}, function(choice)
+		if not choice then return end
+		vim.cmd("silent! wall")
+		if run_sync({ "restore", path, choice.name }) then
+			vim.cmd("silent! checktime")
+			reload_out(path)
+			vim.notify("claudedoc: restored " .. choice.name .. " (<leader>clu again to undo)", vim.log.levels.INFO)
+		end
+	end)
 end
 
 -- <leader>clx : cancel the running ask; <leader>clX : cancel running + drop the queue
 function M.cancel(all)
 	local path = skeleton_of(vim.fn.expand("%:p"))
-	local q = Q[path]
+	local q = Q[root_of(path)]
 	if not q or (not q.job and #q.items == 0) then return vim.notify("claudedoc: nothing running", vim.log.levels.INFO) end
 	if all then q.items = {} end
 	if q.job then vim.fn.jobstop(q.job) end
@@ -301,7 +349,9 @@ end
 function M.watch()
 	local path = skeleton_of(vim.fn.expand("%:p"))
 	local b = block_at_cursor()
-	local id = b and b.id or (Q[path] and Q[path].current)
+	local cur = Q[root_of(path)] and Q[root_of(path)].current
+	local id = b and b.id or (cur and cur.id)
+	if not b and cur then path = cur.doc end
 	if not id then return vim.notify("claudedoc: no block under cursor and nothing running", vim.log.levels.WARN) end
 	local log = snippets_dir(path) .. "/" .. id .. ".log"
 	vim.cmd("botright 15split")
@@ -336,11 +386,15 @@ end
 -- <leader>clq : show the queue
 function M.queue()
 	local path = skeleton_of(vim.fn.expand("%:p"))
-	local q = Q[path]
+	local q = Q[root_of(path)]
 	if not q or (not q.current and #q.items == 0) then return vim.notify("claudedoc: queue empty", vim.log.levels.INFO) end
+	local function name(it)
+		local where = it.doc ~= path and (" [" .. vim.fn.fnamemodify(it.doc, ":t") .. "]") or ""
+		return it.id .. where .. (it.instr and (": " .. it.instr) or "")
+	end
 	local l = {}
-	if q.current then l[#l + 1] = "running: " .. q.current end
-	for i, it in ipairs(q.items) do l[#l + 1] = ("%d. %s%s"):format(i, it.id, it.force and " (force)" or "") end
+	if q.current then l[#l + 1] = "running: " .. name(q.current) end
+	for i, it in ipairs(q.items) do l[#l + 1] = ("%d. %s%s"):format(i, name(it), it.force and " (force)" or "") end
 	vim.notify("claudedoc queue\n" .. table.concat(l, "\n"), vim.log.levels.INFO)
 end
 
@@ -394,7 +448,7 @@ end
 -- <leader>clL : link asks to an existing claude session (picker over recent sessions)
 function M.link(shared)
 	local path = skeleton_of(vim.fn.expand("%:p"))
-	local o = run_sync({ "sessions", vim.fn.fnamemodify(path, ":h") })
+	local o = run_sync({ "sessions", vim.fn.fnamemodify(root_of(path), ":h") })
 	local sessions = o and vim.json.decode(o) or {}
 	if #sessions == 0 then return vim.notify("claudedoc: no claude sessions for this dir", vim.log.levels.WARN) end
 	vim.ui.select(sessions, {
@@ -436,6 +490,8 @@ local HELP = {
 	"  <leader>clw       watch live log of block under cursor (tools, text)",
 	"  <leader>clq       show the queue",
 	"  <leader>clx       cancel running ask      <leader>clX  cancel + drop queue",
+	"  <leader>clg       instruction for the whole document (prose + snippets, prompts kept)",
+	"  <leader>clu       restore a snapshot (one is taken before each clg and each restore)",
 	"  <leader>clt       toggle skeleton <-> rendered (cursor on same block)",
 	"  <leader>cls       open snippet of block under cursor in vsplit (hand-edit)",
 	"  <leader>clb       quickfix list of blocks with status",
@@ -444,6 +500,8 @@ local HELP = {
 	"  <leader>clS       link asks to an existing claude session (shared)",
 	"  <leader>clU       unlink session",
 	"  <leader>clh       this help",
+	"",
+	"  docs inside X.snippets/ (opened via cls) use X.md's session and queue",
 	"",
 	"  env: CLAUDEDOC_FLAGS, CLAUDEDOC_MODEL        q / <Esc> closes",
 }
@@ -494,6 +552,8 @@ function M.setup()
 			map("<leader>clq", M.queue, "show queue")
 			map("<leader>clx", function() M.cancel(false) end, "cancel running")
 			map("<leader>clX", function() M.cancel(true) end, "cancel running + drop queue")
+			map("<leader>clg", M.rewrite, "instruction for the whole document")
+			map("<leader>clu", M.restore, "restore snapshot")
 		end,
 	})
 	-- re-render when a skeleton or a snippet is saved (only if snippets dir exists)
@@ -502,11 +562,11 @@ function M.setup()
 		callback = function(ev)
 			local p = ev.file
 			if is_out(p) then return end
-			local skel = p
 			local d = p:match("^(.*)%.snippets/[^/]+%.md$")
-			if d then skel = d .. ".md" end
-			if vim.uv.fs_stat(snippets_dir(skel)) then
-				run({ "render", skel }, function() reload_out(skel) end)
+			for _, skel in ipairs({ p, d and d .. ".md" }) do
+				if vim.uv.fs_stat(snippets_dir(skel)) then
+					run({ "render", skel }, function() reload_out(skel) end)
+				end
 			end
 		end,
 	})

@@ -24,11 +24,21 @@ Subcommands:
                               for cwd). Default forks it on first ask so the interactive
                               session is untouched; --shared appends to the very same session.
   unlink FILE                 forget the session (next ask starts fresh)
+  rewrite FILE INSTRUCTION    apply INSTRUCTION to the whole document: Claude edits the
+                              skeleton prose and the snippets in place (prompts untouched);
+                              snapshots everything first
+  snapshots FILE              JSON list of snapshots, newest first
+  restore FILE NAME           restore a snapshot (current state is snapshotted first)
+
+A doc inside X.snippets/ (a snippet opened with <leader>cls) shares X.md's
+session and cwd, so asks there resume the same claude session.
 """
 import json
 import os
 import re
+import shutil
 import signal
+import time
 import subprocess
 import sys
 from pathlib import Path
@@ -56,12 +66,40 @@ Rules:
   in one short bracketed note like [could not find: ...].
 - You are a subagent. Don't run memo."""
 
+SYSTEM_DOC = """You are applying ONE instruction to a whole markdown document the user is
+writing in vim. The document is a skeleton file plus snippet files that are
+spliced into it; you are given their paths and must edit them in place with
+your file tools.
+
+Rules:
+- Edit only the files listed. Do not create, rename or delete files.
+- Leave every ```claude-command id=...``` block and every [claude id=...] marker
+  (with its prompt text and optional [/claude]) exactly as is: those are
+  instructions, not content. Change only the prose around them and the
+  snippet contents.
+- Keep markdown structure, headings, links and facts; change only what the
+  instruction asks for.
+- When done, reply with one short line summarising what changed.
+- You are a subagent. Don't run memo."""
+
 
 # ----------------------------------------------------------------- parsing
 def paths(doc):
     doc = Path(doc).resolve()
     stem = doc.with_suffix("")
     return doc, Path(str(stem) + ".out.md"), Path(str(stem) + ".snippets")
+
+
+def root_doc(doc):
+    """Outermost document owning DOC: a doc inside X.snippets/ belongs to X.md.
+    Session and cwd come from the root so nested asks resume the same session."""
+    doc = Path(doc).resolve()
+    for parent in reversed(doc.parents):  # outermost first
+        if parent.name.endswith(".snippets"):
+            cand = parent.with_name(parent.name[: -len(".snippets")] + ".md")
+            if cand.exists():
+                return cand
+    return doc
 
 
 def parse(lines):
@@ -191,9 +229,14 @@ def _log_event(log, d):
     log.flush()
 
 
-def call_claude(prompt, cwd, snips, bid):
-    sess_file, log_file = snips / ".session", snips / f"{bid}.log"
-    base = ["claude", "-p", "--verbose", "--output-format", "stream-json", *CLAUDE_FLAGS, "--append-system-prompt", SYSTEM]
+def call_claude(prompt, doc, bid, system=SYSTEM):
+    root = root_doc(doc)
+    _, _, root_snips = paths(root)
+    _, _, snips = paths(doc)
+    root_snips.mkdir(exist_ok=True)
+    cwd = str(root.parent)  # claude --resume looks sessions up by cwd
+    sess_file, log_file = root_snips / ".session", snips / f"{bid}.log"
+    base = ["claude", "-p", "--verbose", "--output-format", "stream-json", *CLAUDE_FLAGS, "--append-system-prompt", system]
     if MODEL:
         base += ["--model", MODEL]
     raw = sess_file.read_text().strip() if sess_file.exists() else ""
@@ -251,7 +294,7 @@ def fill(doc, lines, blocks, snips, b, force):
         f"Document: {doc.name}\nFill the block id={b['id']} ({b['kind']}). "
         "Reply with only the replacement text.\n\n" + "\n".join(ctx)
     )
-    text = call_claude(prompt, str(doc.parent), snips, b["id"])
+    text = call_claude(prompt, doc, b["id"])
     text = re.sub(r"^```[a-z]*\n(.*)\n```$", r"\1", text, flags=re.S)  # unwrap a stray fence
     (snips / f"{b['id']}.md").write_text(text + "\n")
     (snips / f"{b['id']}.prompt").write_text(b["prompt"] + "\n")
@@ -323,7 +366,7 @@ def cmd_sessions(cwd):
 
 
 def cmd_link(doc, sid, shared):
-    doc, _, snips = paths(doc)
+    doc, _, snips = paths(root_doc(doc))
     snips.mkdir(exist_ok=True)
     if not sid:
         files = sorted(project_dir(doc.parent).glob("*.jsonl"), key=lambda p: p.stat().st_mtime, reverse=True)
@@ -335,11 +378,87 @@ def cmd_link(doc, sid, shared):
 
 
 def cmd_unlink(doc):
-    _, _, snips = paths(doc)
+    _, _, snips = paths(root_doc(doc))
     f = snips / ".session"
     if f.exists():
         f.unlink()
     print(json.dumps({"linked": None}))
+
+
+# ----------------------------------------------------------------- whole-doc rewrite
+def _snippet_files(snips):
+    return sorted(f for f in snips.glob("*") if f.suffix in (".md", ".prompt"))
+
+
+def snapshot(doc, label):
+    doc, _, snips = paths(doc)
+    hist = snips / ".history"
+    name = time.strftime("%Y%m%d-%H%M%S")
+    n = 1
+    while (hist / name).exists():
+        name, n = f"{time.strftime('%Y%m%d-%H%M%S')}-{n}", n + 1
+    d = hist / name
+    (d / "snippets").mkdir(parents=True)
+    shutil.copy2(doc, d / doc.name)
+    for f in _snippet_files(snips):
+        shutil.copy2(f, d / "snippets" / f.name)
+    (d / "meta.json").write_text(json.dumps({"label": label, "time": int(time.time())}))
+    return d
+
+
+def cmd_snapshots(doc):
+    _, _, snips = paths(doc)
+    out = []
+    for d in sorted((snips / ".history").glob("*/"), reverse=True):
+        try:
+            meta = json.loads((d / "meta.json").read_text())
+        except (OSError, ValueError):
+            continue
+        out.append(dict(name=d.name, label=meta.get("label", ""), time=meta.get("time", 0)))
+    print(json.dumps(out))
+
+
+def cmd_restore(doc, name):
+    doc, _, snips = paths(doc)
+    d = snips / ".history" / name
+    if not (d / doc.name).exists():
+        sys.exit(f"no snapshot {name}")
+    snapshot(doc, f"before restoring {name}")
+    shutil.copy2(d / doc.name, doc)
+    for f in _snippet_files(snips):
+        f.unlink()
+    for f in (d / "snippets").glob("*"):
+        shutil.copy2(f, snips / f.name)
+    print(json.dumps({"restored": name}))
+    cmd_render(doc)
+
+
+def cmd_rewrite(doc, instruction):
+    doc, _, snips = paths(doc)
+    snips.mkdir(exist_ok=True)
+    before = {b["id"]: b["prompt"] for b in parse(doc.read_text().split("\n"))}
+    snap = snapshot(doc, instruction)
+    files = [doc] + [f for f in _snippet_files(snips) if f.suffix == ".md"]
+    prompt = (
+        f"Instruction for the whole document: {instruction}\n\n"
+        "Files to edit in place (skeleton first, then the snippets spliced into it):\n"
+        + "\n".join(f"- {f}" for f in files)
+        + f"\n\nFor reading order, the rendered document is {paths(doc)[1]} (do not edit it)."
+    )
+    try:
+        summary = call_claude(prompt, doc, "@doc", system=SYSTEM_DOC)
+    except SystemExit:
+        if doc.read_bytes() == (snap / doc.name).read_bytes() and all(
+            (snap / "snippets" / f.name).exists() and f.read_bytes() == (snap / "snippets" / f.name).read_bytes()
+            for f in _snippet_files(snips)
+        ):
+            shutil.rmtree(snap)  # nothing changed: drop the useless snapshot
+        raise
+    after = {b["id"]: b["prompt"] for b in parse(doc.read_text().split("\n"))}
+    changed = sorted(i for i in before if after.get(i) != before[i])
+    note = f" (prompts changed, now stale: {', '.join(changed)})" if changed else ""
+    print(json.dumps({"id": "@doc", "result": f"{' '.join(summary.split())[:120]}{note} [undo: <leader>clu {snap.name}]"}))
+    cmd_render(doc)
 
 
 def cmd_new_id(doc):
@@ -363,6 +482,12 @@ def main(argv):
         return cmd_link(doc, rest[0] if rest else None, shared)
     if cmd == "unlink":
         return cmd_unlink(doc)
+    if cmd == "rewrite":
+        return cmd_rewrite(doc, " ".join(rest))
+    if cmd == "snapshots":
+        return cmd_snapshots(doc)
+    if cmd == "restore":
+        return cmd_restore(doc, rest[0])
     if cmd == "blocks":
         cmd_blocks(doc)
     elif cmd == "render":
