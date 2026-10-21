@@ -248,6 +248,8 @@ def call_claude(prompt, doc, bid, system=SYSTEM):
             cmd += ["--resume", resume]
             if fork:
                 cmd += ["--fork-session"]
+        if not resume or fork:  # never rename a shared (interactive) session
+            cmd += ["--name", f"claudedoc: {root.name}"]  # findable in /resume
         result, errtail = None, []
         with log_file.open("w") as log:
             log.write(f"[ask] id={bid}  resume={resume or '-'}{' (fork)' if resume and fork else ''}\n")

@@ -70,6 +70,7 @@ text [claude id=baz] embedded prompt [/claude] more text   (several per line ok;
 | `<leader>clr` | Re-render (also automatic on save of skeleton or snippet) |
 | `<leader>clL` / `clS` | Link asks to an existing Claude session: fork (interactive session untouched) / shared |
 | `<leader>clU` | Unlink session (next ask starts fresh) |
+| `<leader>clc` | Copy `cd <doc dir> && claude --resume <id>` for the doc's session (`/resume` doesn't list `claude -p` sessions) |
 | `<leader>clh` | Help popup with this table |
 | `<leader>clw` | Watch the live log of the block under cursor (tool calls, text, cost) in a bottom split |
 | `<leader>clq` | Show the per-document queue |
@@ -89,6 +90,9 @@ The ask's system prompt ends with "You are a subagent. Don't run memo."
 A doc inside `X.snippets/` (a snippet opened with `cls` that has its own blocks)
 resolves its session, cwd and queue from the outermost `X.md` (`root_doc()` /
 `root_of()`), so asks there resume the same session and `clL`/`clU` act on it.
+
+Forked/fresh asks pass `--name "claudedoc: <doc>"`; shared ones don't, so the
+interactive session keeps its title.
 
 `CLAUDEDOC_FLAGS` (default `--dangerously-skip-permissions`) and
 `CLAUDEDOC_MODEL` tune the `claude -p` call. Toggle works from either file via

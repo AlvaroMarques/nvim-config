@@ -465,6 +465,19 @@ function M.link(shared)
 	end)
 end
 
+-- <leader>clc : copy the command that opens the doc's claude session interactively
+-- (the /resume picker does not list sessions created by claude -p)
+function M.copy_resume()
+	local root = root_of(vim.fn.expand("%:p"))
+	local f = io.open(snippets_dir(root) .. "/.session")
+	local sid = f and f:read("*l"); if f then f:close() end
+	sid = sid and sid:gsub("^fork:", "")
+	if not sid or sid == "" then return vim.notify("claudedoc: no session yet", vim.log.levels.WARN) end
+	local cmd = ("cd %s && claude --resume %s"):format(vim.fn.shellescape(vim.fn.fnamemodify(root, ":h")), sid)
+	vim.fn.setreg("+", cmd)
+	vim.notify("claudedoc: copied  " .. cmd, vim.log.levels.INFO)
+end
+
 function M.unlink()
 	local r = run_sync({ "unlink", skeleton_of(vim.fn.expand("%:p")) })
 	if r then vim.notify("claudedoc: unlinked", vim.log.levels.INFO) end
@@ -499,6 +512,7 @@ local HELP = {
 	"  <leader>clL       link asks to an existing claude session (fork, safe)",
 	"  <leader>clS       link asks to an existing claude session (shared)",
 	"  <leader>clU       unlink session",
+	"  <leader>clc       copy 'cd .. && claude --resume <id>' for the doc's session",
 	"  <leader>clh       this help",
 	"",
 	"  docs inside X.snippets/ (opened via cls) use X.md's session and queue",
@@ -547,6 +561,7 @@ function M.setup()
 			map("<leader>clL", function() M.link(false) end, "link to claude session (fork)")
 			map("<leader>clS", function() M.link(true) end, "link to claude session (shared)")
 			map("<leader>clU", M.unlink, "unlink session")
+			map("<leader>clc", M.copy_resume, "copy resume command")
 			map("<leader>clh", M.help, "help")
 			map("<leader>clw", M.watch, "watch live log")
 			map("<leader>clq", M.queue, "show queue")
