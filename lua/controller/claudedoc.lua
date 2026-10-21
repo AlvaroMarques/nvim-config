@@ -185,7 +185,11 @@ function M.new_block(visual)
 	local id = run_sync({ "new-id", path }) or "c1"
 	local open, close = "```claude-command id=" .. id, "```"
 	if visual then
-		local s, e = vim.fn.line("'<"), vim.fn.line("'>")
+		-- '< '> are only set on leaving visual mode, so inside the mapping they
+		-- still hold the previous selection; read the live one instead
+		local s, e = vim.fn.line("v"), vim.fn.line(".")
+		if s > e then s, e = e, s end
+		vim.cmd("normal! \27")
 		vim.api.nvim_buf_set_lines(0, e, e, false, { close })
 		vim.api.nvim_buf_set_lines(0, s - 1, s - 1, false, { open })
 		vim.api.nvim_win_set_cursor(0, { s, 0 })
